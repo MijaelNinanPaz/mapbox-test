@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Location</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://api.tiles.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
+    <link href="https://api.tiles.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet"/>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+
+      .map-info {
+        position: absolute;
+        font-family: sans-serif;
+        margin-top: 5px;
+        margin-left: 5px;
+        padding: 5px;
+        width: 280px;
+        border: 2px solid black;
+        font-size: 20px;
+        color: #222;
+        background-color: #fff;
+      }
+    </style>
+  </head>
+
+  <body>
+
+    <!-- Load the `mapbox-gl-geocoder` plugin. -->
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js"></script>
+    <link
+    rel="stylesheet"
+    href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css"
+    type="text/css" />
+
+    <div id="map"></div>
+    
+    <div class="map-info">
+      <div>Longitude:&nbsp;<span id="lng"></span></div>
+      <div>Latitude:&nbsp;<span id="lat"></span></div>
+      <div>Elevation:&nbsp;<span id="elevation"></span></div>
+      <div>Address:&nbsp;<span id="address"></span></div>
+      <div>Place(City):&nbsp;<span id="place"></span></div>
+      <div>District(County):&nbsp;<span id="district"></span></div>
+      <div>Region(State):&nbsp;<span id="region"></span></div>
+      <div>Country:&nbsp;<span id="country"></span></div>
+    </div>
+    <script>
+      mapboxgl.accessToken = 'pk.eyJ1IjoibWlqYWVsNiIsImEiOiJjbG1wZndzdnowMWt0MmtwbXBhdmg5dmF0In0.z8AaNTwnDOkZbFjBg3DBMw';
+
+      let lng;
+      let lat;
+      const lngDisplay = document.getElementById('lng');
+      const latDisplay = document.getElementById('lat');
+      const elevationDisplay = document.getElementById('elevation');
+      const addressDisplay = document.getElementById('address');
+      const placeDisplay = document.getElementById('place');
+      const districtDisplay = document.getElementById('district');
+      const regionDisplay = document.getElementById('region');
+      const countryDisplay = document.getElementById('country');
+
+
+      (async () => {
+        const map = new mapboxgl.Map({
+          container: 'map', // container id
+          // style: 'mapbox://styles/mapbox/streets-v12',
+          style: 'mapbox://styles/mapbox/satellite-streets-v12',
+          center: [-100.6247, 40.2012], // starting position [lng, lat]
+          zoom: 11.5 // starting zoom
+        });
+
+        // Initialize a marker
+        const marker = new mapboxgl.Marker({
+          'color': '#314ccd',
+          draggable: true
+        })
+        .setLngLat([-100.6247, 40.2012]) // Marker [lng, lat] coordinates
+        .addTo(map); // Add the marker to the map
+
+
+        // wait for map load to occur in parallel
+        await map.once("style.load")
+
+        // Set custom fog
+        map.setFog({
+          range: [-0.5, 2],
+          color: "#def",
+          "high-color": "#def",
+          "space-color": "#def",
+        });
+
+        // Add terrain source, with slight exaggeration
+        map.addSource("mapbox-dem", {
+          type: "raster-dem",
+          url: "mapbox://mapbox.terrain-rgb",
+          tileSize: 512,
+          maxzoom: 14,
+        });
+        map.setTerrain({ source: "mapbox-dem" });
+        // map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+
+
+        async function getElevation(data) {
+          
+          addressDisplay.textContent = data.address;
+          placeDisplay.textContent = data.city;
+          districtDisplay.textContent = data.county;
+          regionDisplay.textContent = data.state;
+          countryDisplay.textContent = data.country;
+
+          // Construct the API request.
+          const query = await fetch(
+            `https://api.mapbox.com/v4/mapbox.mapbox-terrain-v2/tilequery/${lng},${lat}.json?layers=contour&limit=50&access_token=${mapboxgl.accessToken}`,
+            { method: 'GET' }
+          );
+          if (query.status !== 200) return;
+          const queryData = await query.json();
+          // Display the longitude and latitude values.
+          lngDisplay.textContent = lng.toFixed(4);
+          latDisplay.textContent = lat.toFixed(4);
+
+          // Get all the returned features.
+          const allFeatures = queryData.features;
+          // For each returned feature, add elevation data to the elevations array.
+          const elevations = allFeatures.map((feature) => feature.properties.ele);
+          // In the elevations array, find the largest value.
+          const highestElevation = Math.max(...elevations);
+          // Display the largest elevation value.
+          elevationDisplay.textContent = `${highestElevation} meters`;
+
+          data.lng = lng;
+          data.lat = lat;
+          data.elevation = highestElevation;
+
+          console.log("data", data)
+
+        }
+
+
+        map.on('click', (event) => {
+          // Use the returned LngLat object to set the marker location
+          marker.setLngLat(event.lngLat);
+
+          lng = event.lngLat.lng;
+          lat = event.lngLat.lat;
+
+          let address ="";
+          let place ="";
+          let district = "";
+          let region = "";
+          let country = "";
+
+          fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}`)
+            .then(response => response.json())
+            .then((result) => {
+              result.features.forEach((myContext) => {
+                if (myContext.id.includes('address')) address = `${myContext.address} ${myContext.text}`;
+                if (myContext.id.includes('place')) place = myContext.text;
+                if (myContext.id.includes('district')) district = myContext.text;
+                if (myContext.id.includes('region')) region = `${myContext.text} (${myContext.properties.short_code})`;
+                if (myContext.id.includes('country')) country = `${myContext.text} (${myContext.properties.short_code})`;
+              })
+            })
+            .then(() => {
+              const data = {
+                address: address,
+                city: place,
+                county: district,
+                state: region,
+                country: country
+              }
+
+              getElevation(data)
+            })
+        });
+
+        marker.on('dragend', (event) => {
+          // Obtener la nueva ubicación del marcador
+          const newLngLat = marker.getLngLat();
+
+          // Actualizar las variables de longitud y latitud
+          lng = newLngLat.lng;
+          lat = newLngLat.lat;
+
+          fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}`)
+            .then(response => response.json())
+            .then((result) => {
+              result.features.forEach((myContext) => {
+                if (myContext.id.includes('address')) address = `${myContext.address} ${myContext.text}`;
+                if (myContext.id.includes('place')) place = myContext.text;
+                if (myContext.id.includes('district')) district = myContext.text;
+                if (myContext.id.includes('region')) region = `${myContext.text} (${myContext.properties.short_code})`;
+                if (myContext.id.includes('country')) country = `${myContext.text} (${myContext.properties.short_code})`;
+              })
+            })
+            .then(() => {
+              const data = {
+                address: address,
+                city: place,
+                county: district,
+                state: region,
+                country: country
+              }
+
+              getElevation(data)
+            })
+        });
+
+
+        // Initialize the geocoder.
+        const geocoder = new MapboxGeocoder({
+          accessToken: mapboxgl.accessToken,
+          // placeholder: 'Search your home',
+          // marker: {
+          //   color: 'orange'
+          // },
+          marker: false,
+          mapboxgl: mapboxgl, // Set the mapbox-gl instance
+          language: 'en' // Set the language to English
+        });
+        
+      // Add the geocoder to the map
+      map.addControl(geocoder);
+
+      // We get the result of geocoder
+      geocoder.on('result', (event) => {
+
+        const result = event.result;
+
+        marker.setLngLat(result.geometry.coordinates);
+
+        lng = result.geometry.coordinates[0];
+        lat = result.geometry.coordinates[1];
+
+        let place ="";
+        let district = "";
+        let region = "";
+        let country = "";
+
+        result.context.forEach((myContext) => {
+          if (myContext.id.includes('place')) place = myContext.text;
+          if (myContext.id.includes('district')) district = myContext.text;
+          if (myContext.id.includes('region')) region = `${myContext.text} (${myContext.short_code})`;
+          if (myContext.id.includes('country')) country = `${myContext.text} (${myContext.short_code})`;
+        })
+
+        const data = {
+          address: `${result.address} ${result.text_en}`,
+          city: place,
+          county: district,
+          state: region,
+          country: country
+        }
+
+        getElevation(data);
+
+      });
+    })();
+    </script>
+  </body>
+</html>
