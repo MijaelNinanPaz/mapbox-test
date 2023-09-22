@@ -4,7 +4,7 @@ const data = {}
 const center = [-118.1887, 34.0854];
 
 (async () => {
-    
+
     // Initialize the map
     const map = new mapboxgl.Map({
         container: 'map', // container id
@@ -64,6 +64,12 @@ const center = [-118.1887, 34.0854];
         // We obtain the elevation in feet by dividing the largest value by 0.3048
         data.elevation = Number((highestElevation/0.3048).toFixed(4));
 
+        // Build geojson
+        data.geolocation = {
+            type: 'Point',
+            coordinates: [data.lng, data.lat]
+        };
+        
         console.log("data", data)
     }
 
@@ -73,13 +79,36 @@ const center = [-118.1887, 34.0854];
         fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${data.lng},${data.lat}.json?access_token=${mapboxgl.accessToken}`)
         .then(response => response.json())
         .then((result) => {
-            result.features.forEach((myContext) => {
-            if (myContext.id.includes('address')) data.address = `${myContext.address} ${myContext.text}`;
-            if (myContext.id.includes('place')) data.city = myContext.text;
-            if (myContext.id.includes('district')) data.county = myContext.text;
-            if (myContext.id.includes('region')) data.state = myContext.properties.short_code;
-            if (myContext.id.includes('country')) data.country = myContext.properties.short_code;
-            })
+
+            // Extract data from the place
+            const features = result.features
+            const featureLength = features.length
+
+            for (let i = 0; i < featureLength; i++) {
+
+                const myFeature = features[i];
+
+                if (myFeature.id.includes('address')) {
+                    data.address = `${myFeature.address} ${myFeature.text}`;
+                    continue;
+                }
+                if (myFeature.id.includes('place')) {
+                    data.city = myFeature.text;
+                    continue;
+                }
+                if (myFeature.id.includes('district')) {
+                    data.county = myFeature.text;
+                    continue;
+                }
+                if (myFeature.id.includes('region')) {
+                    data.state = myFeature.properties.short_code;
+                    continue;
+                }
+                if (myFeature.id.includes('country')) {
+                    data.country = myFeature.properties.short_code;
+                }
+            }
+
             getElevation()
         })
     }
@@ -110,13 +139,33 @@ const center = [-118.1887, 34.0854];
         data.lng = result.geometry.coordinates[0];
         data.lat = result.geometry.coordinates[1];
 
+        // Extract data from the place
         data.address = `${result.address} ${result.text_en}`
-        result.context.forEach((myContext) => {
-        if (myContext.id.includes('place')) data.city = myContext.text;
-        if (myContext.id.includes('district')) data.county = myContext.text;
-        if (myContext.id.includes('region')) data.state = myContext.short_code;
-        if (myContext.id.includes('country')) data.country = myContext.short_code;
-        })
+
+        const context = result.context
+        const contextLength = context.length
+
+        for (let i = 0; i < contextLength; i++) {
+
+            const myContext = context[i];
+
+            if (myContext.id.includes('place')) {
+                data.city = myContext.text;
+                continue;
+            }
+            if (myContext.id.includes('district')) {
+                data.county = myContext.text;
+                continue;
+            }
+            if (myContext.id.includes('region')) {
+                data.state = myContext.short_code;
+                continue;
+            }
+            if (myContext.id.includes('country')) {
+                data.country = myContext.short_code;
+            }
+        }
+
         getElevation();
     });
 
