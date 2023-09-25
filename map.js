@@ -99,8 +99,9 @@ const geocoder = new MapboxGeocoder({
     //   color: 'orange'
     // },
     marker: false,
-    mapboxgl: mapboxgl, // Set the mapbox-gl instance
-    language: 'en' // Set the language to English
+    language: 'en',       // Set the language to English
+    countries: 'us, ca',  // Limit seach results to the United States and Canada.
+    mapboxgl: mapboxgl,   // Set the mapbox-gl instance
 });
 // Add the geocoder to the map
 map.addControl(geocoder);
